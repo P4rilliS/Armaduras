@@ -1,6 +1,5 @@
 import logging
 import os
-from dotenv import load_dotenv
 from pymongo import MongoClient
 from datetime import datetime
 from telegram import ReplyKeyboardMarkup, Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -13,10 +12,8 @@ import produccion as prod
 import alambre as al
 import generarPDF as genPDF
 
-load_dotenv()  # Carga las variables de entorno desde el .env
-
 # Configuración de logs
-# logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 # ESTADOS DE LA CONVERSACIÓN
 # Usamos estos para que el bot sepa en qué paso de la "entrevista" va
