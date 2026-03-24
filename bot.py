@@ -166,7 +166,7 @@ async def generar_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ---LIMPIAR TODO ---
 async def comando_limpiar_todo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    exito = database.borrar_toda_la_data()
+    exito = db.borrar_toda_la_data()
     if exito:
         mensaje = (
             "💣 **¡SISTEMA RESETEADO!**\n\n"
