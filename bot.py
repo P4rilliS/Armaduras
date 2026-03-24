@@ -138,7 +138,7 @@ async def ver_totales(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = "📊 **TOTALES DE ARMADURAS**\n\n"
     for t in totales:
         # texto += f"hola aqui va"
-        texto += f"🔹 {t['_id']['m']}m \* {t['_id']['c']}C\n   Total: {t['total']}\n\n"
+        texto += rf"🔹 {t['_id']['m']}m \* {t['_id']['c']}C\n   Total: {t['total']}\n\n"
     
     await update.message.reply_text(texto, parse_mode='MarkdownV2')
 
