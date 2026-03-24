@@ -34,3 +34,13 @@ def db_obtener_totales():
         {"$group": {"_id": {"m": "$medida", "c": "$copas"}, "total": {"$sum": "$cantidad"}}}
     ]
     return list(col_produccion.aggregate(pipeline))
+
+def borrar_toda_la_data():
+    """Borra todos los documentos de ventas y ajustes."""
+    try:
+        col_produccion.delete_many({})
+        col_alambre.delete_many({}) 
+        return True
+    except Exception as e:
+        print(f"Error al borrar la data: {e}")
+        return False
