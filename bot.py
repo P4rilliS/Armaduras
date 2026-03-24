@@ -1,6 +1,6 @@
 import logging
 import os
-# from dotenv import load_dotenv
+from dotenv import load_dotenv
 from pymongo import MongoClient
 from datetime import datetime
 from telegram import ReplyKeyboardMarkup, Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -13,7 +13,7 @@ import produccion as prod
 import alambre as al
 import generarPDF as genPDF
 
-# load_dotenv()  # Carga las variables de entorno desde el .env
+load_dotenv()  # Carga las variables de entorno desde el .env
 
 # Configuración de logs
 # logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -21,6 +21,7 @@ import generarPDF as genPDF
 # ESTADOS DE LA CONVERSACIÓN
 # Usamos estos para que el bot sepa en qué paso de la "entrevista" va
 MEDIDA, COPAS, CANTIDAD, ALAMBRE_CALIBRE, ALAMBRE_KILOS = range(5)
+TOKEN_TELEGRAM = os.getenv("TOKEN_TELEGRAM")  # Asegúrate de tener esta variable en tu .env
 
 TECLADO = [['➕ Produccion de Armaduras'], ['🔩 Gasto de Alambre'], ['📊 Ver Totales', '📄 Descargar PDF']]
 CANCELAR = ReplyKeyboardMarkup([['❌ Cancelar']], resize_keyboard=True, one_time_keyboard=True)
@@ -166,7 +167,7 @@ async def generar_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     os.remove(archivo)
 
 
-# ---LIMPIAR--- TODO
+# ---LIMPIAR TODO ---
 async def comando_limpiar_todo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     exito = database.borrar_toda_la_data()
     if exito:
@@ -183,7 +184,7 @@ async def comando_limpiar_todo(update: Update, context: ContextTypes.DEFAULT_TYP
 # --- MAIN ---
 if __name__ == '__main__':
     # Pon aquí el token que te dio el BotFather
-    application = ApplicationBuilder().token("7917378484:AAHtwC-Q2fJ_A2WPvP8KtvB_ssfw8zKGzwo").build()
+    application = ApplicationBuilder().token(TOKEN_TELEGRAM).build()
 
     # Manejador de la conversación de armaduras
  
@@ -207,7 +208,7 @@ if __name__ == '__main__':
             fallbacks=[CommandHandler("start", start), MessageHandler(filters.Regex('^❌ Cancelar$'), cancelar)],
             allow_reentry=True # IMPORTANTE: Permite saltar de una función a otra si te equivocas
         )
-    application.add_handler(conv_prod)
+    application.add_handler(conv_prod)    
 
 
 
