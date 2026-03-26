@@ -180,8 +180,12 @@ async def comando_limpiar_todo(update: Update, context: ContextTypes.DEFAULT_TYP
 
 # --- MAIN ---
 if __name__ == '__main__':
-    # Pon aquí el token que te dio el BotFather
+    if not TOKEN_TELEGRAM:
+        print("❌ ERROR: No se encontró la variable TOKEN_TELEGRAM. Revisa Railway.")
+        exit(1) # Detiene el programa con elegancia
+    
     application = ApplicationBuilder().token(TOKEN_TELEGRAM).build()
+
 
     # Manejador de la conversación de armaduras
  
