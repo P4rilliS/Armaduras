@@ -191,8 +191,8 @@ if __name__ == '__main__':
  
 
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & filters.Regex('📊 Ver Totales')), ver_totales)
-    application.add_handler(MessageHandler(filters.TEXT & filters.Regex('📄 Descargar PDF')), generar_pdf)
+    application.add_handler(MessageHandler(filters.TEXT & filters.Regex('^📊 Ver Totales'), ver_totales))
+    application.add_handler(MessageHandler(filters.TEXT & filters.Regex('^📄 Descargar PDF'), generar_pdf))
     application.add_handler(CommandHandler("limpiar", comando_limpiar_todo)) # Comando para limpiar todo (solo para pruebas)
 
     conv_prod = ConversationHandler(
