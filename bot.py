@@ -13,7 +13,10 @@ import alambre as al
 import generarPDF as genPDF
 
 # Configuración de logs
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("telegram.ext.Application").setLevel(logging.WARNING)
+
 
 # ESTADOS DE LA CONVERSACIÓN
 # Usamos estos para que el bot sepa en qué paso de la "entrevista" va
