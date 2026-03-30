@@ -18,7 +18,7 @@ def crear_pdf_semanal():
 
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
+    pdf.set_font("Arial", "B", 14)
     pdf.cell(190, 10, "REPORTE DE PLANTA - SEMANAL", ln=True, align='C')
     pdf.set_font("Arial", size=10)
     pdf.cell(190, 10, f"Desde: {inicio_semana.strftime('%d/%m/%Y')} hasta {hoy.strftime('%d/%m/%Y %H:%M')}", ln=True, align='C')

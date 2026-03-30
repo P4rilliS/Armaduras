@@ -60,7 +60,7 @@ async def handle_medida(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Mostramos el menú de copas según la medida
     await query.edit_message_text(
-        text=f"Seleccionaste {medida}. ¿De cuántas copas es?",
+        text=f"Seleccionaste {medida}. ¿De cuántas copas?",
         reply_markup=prod.menu_copas(medida)
     )
     return COPAS
@@ -73,14 +73,15 @@ async def handle_copas(update: Update, context: ContextTypes.DEFAULT_TYPE):
     copas = query.data.split('_')[2]
     context.user_data['prod_copas'] = copas
     
-    await query.edit_message_text(f"Perfecto: {context.user_data['prod_medida']}m con {copas}C.\n\n🔢 Dime la cantidad que hiciste:")
+    await query.edit_message_text(f"Perfecto: {context.user_data['prod_medida']}m con {copas}C.\n\n🔢 cantidad producida:")
     return CANTIDAD
 
 async def guardar_produccion_final(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_name = update.effective_user.first_name
     cantidad = update.message.text
     
     if not cantidad.isdigit():
-        await update.message.reply_text("Mano, ponme un número válido, no me vaciles.")
+        await update.message.reply_text(f"{user_name}, coloca un número válido.")
         return CANTIDAD
 
     # Sacamos los datos que veníamos guardando en user_data
@@ -89,9 +90,10 @@ async def guardar_produccion_final(update: Update, context: ContextTypes.DEFAULT
     
     # GUARDAMOS EN MONGODB
     db.db_guardar_produccion(medida, copas, cantidad)
+    user_name = update.effective_user.first_name
     
     await update.message.reply_text(
-        f"✅ ¡Listo Sergio!\nRegistrado: {medida}m - {copas}C - Cantidad: {cantidad}",
+        f"✅ ¡Listo {user_name}!\nRegistrado: {medida}m - {copas}C - Cantidad: {cantidad}",
         reply_markup=get_main_keyboard()
     )
     return ConversationHandler.END
@@ -113,12 +115,13 @@ async def handle_calibre(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(f"Calibre {calibre} seleccionado.\n\n🔢 Ahora dime cuántos kilos ingresaron:")
     return ALAMBRE_KILOS
 async def guardar_alambre_final(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_name = update.effective_user.first_name
     kilos = update.message.text.replace(',', '.')
     
     try:
         kilos_float = float(kilos)
     except ValueError:
-        await update.message.reply_text("Mano, ponme un número válido para los kilos, no me vaciles.")
+        await update.message.reply_text(f"{user_name}, coloca un número válido para los kilos.")
         return ALAMBRE_KILOS
 
     calibre = context.user_data.get('alambre_calibre')
@@ -135,15 +138,15 @@ async def guardar_alambre_final(update: Update, context: ContextTypes.DEFAULT_TY
 async def ver_totales(update: Update, context: ContextTypes.DEFAULT_TYPE):
     totales = db.db_obtener_totales()
     if not totales:
-        await update.message.reply_text("Todavía no hay nada en la base de datos.")
+        await update.message.reply_text("No hay nada en la base de datos.")
         return
 
     texto = "📊 **TOTALES DE ARMADURAS**\n\n"
     for t in totales:
         # texto += f"hola aqui va"
-        texto += rf"🔹 {t['_id']['m']}m \* {t['_id']['c']}C\n   Total: {t['total']}\n\n"
+        texto += f"🔹 {t['_id']['m']}m \* {t['_id']['c']}C\n   Total: {t['total']}\n\n"
     
-    await update.message.reply_text(texto, parse_mode='MarkdownV2')
+    await update.message.reply_text(texto, parse_mode='Markdown')
 
 # --- GENERAR PDF ---    
 
