@@ -8,6 +8,12 @@ client = MongoClient(MONGO_URL)
 # client = MongoClient("mongodb+srv://admin:admin12345@clusterprueba.l2t7dwu.mongodb.net/?appName=clusterPrueba") 
 db = client['FabricaResortes']
 
+try:
+    client.admin.command('ping')
+    print("✅ ¡Conexión exitosa a MongoDB Atlas, Sergio!")
+except Exception as e:
+    print(f"❌ Error de conexión a Mongo: {e}")
+
 # Gavetas
 col_produccion = db['produccion_armaduras']
 col_alambre = db['gasto_alambre']
