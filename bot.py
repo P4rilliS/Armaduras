@@ -18,7 +18,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 # ESTADOS DE LA CONVERSACIÓN
 # Usamos estos para que el bot sepa en qué paso de la "entrevista" va
 MEDIDA, COPAS, CANTIDAD, ALAMBRE_CALIBRE, ALAMBRE_KILOS = range(5)
-TOKEN = os.getenv("TOKEN_TELEGRAM")  # Asegúrate de tener esta variable en tu .env
+TOKEN_TELEGRAM = os.getenv("TOKEN_TELEGRAM")  # Asegúrate de tener esta variable en tu .env
 
 TECLADO = [['➕ Produccion de Armaduras'], ['🔩 Gasto de Alambre'], ['📊 Ver Totales', '📄 Descargar PDF']]
 CANCELAR = ReplyKeyboardMarkup([['❌ Cancelar']], resize_keyboard=True, one_time_keyboard=True)
@@ -180,11 +180,11 @@ async def comando_limpiar_todo(update: Update, context: ContextTypes.DEFAULT_TYP
 
 # --- MAIN ---
 if __name__ == '__main__':
-    if not TOKEN:
-        print("❌ ERROR: No se encontró la variable TOKEN. Revisa Railway.")
+    if not TOKEN_TELEGRAM:
+        print("❌ ERROR: No se encontró la variable TOKEN_TELEGRAM. Revisa Railway.")
         exit(1) # Detiene el programa con elegancia
     
-    application = ApplicationBuilder().token(TOKEN).build()
+    application = ApplicationBuilder().token(TOKEN_TELEGRAM).build()
 
 
     # Manejador de la conversación de armaduras
