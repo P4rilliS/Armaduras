@@ -151,11 +151,12 @@ async def ver_totales(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- GENERAR PDF ---    
 
 async def generar_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_name = update.effective_user.first_name
     # Llamamos a la función del otro archivo
     archivo = genPDF.crear_pdf_semanal()
 
     if archivo is None:
-        await update.message.reply_text("Mano, todavía no hay data cargada desde el lunes.")
+        await update.message.reply_text(f"{user_name}, todavía no hay data cargada desde el lunes.")
         return
 
     # Enviamos el archivo
@@ -163,7 +164,7 @@ async def generar_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_document(
             chat_id=update.effective_chat.id,
             document=doc,
-            caption="Aquí tienes el reporte de la fábrica, Sergio. ¡Dale plomo!"
+            caption=f"Aquí tienes el reporte de la fábrica, {user_name}!"
         )
     
     # Borramos el archivo para que no estorbe en la carpeta
