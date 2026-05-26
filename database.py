@@ -28,34 +28,27 @@ def db_guardar_produccion(medida, copas, cantidad):
     }
     return col_produccion.insert_one(registro)
 
-def db_registrar_patio(medida, copas, cantidad_quedaron):
-    """Registra lo que se quedó en el patio HOY sin terminar."""
+def db_registrar_patio(cantidad_quedaron):
+    """Registra el total global que quedó en el patio HOY sin terminar."""
     registro = {
         "fecha": datetime.now().strftime("%d/%m/%Y"),
-        "medida": medida,
-        "copas": copas,
         "cantidad_patio": int(cantidad_quedaron),
         "timestamp": datetime.now()
     }
     return col_patio.insert_one(registro)
 
-def db_obtener_ultimo_patio(medida, copas):
-    """Busca el último registro del patio (lo que quedó de ayer)."""
+def db_obtener_ultimo_patio_global():
+    """Busca el último registro del patio general (lo que quedó el viernes/ayer)."""
     resultado = col_patio.find_one(
-        {"medida": medida, "copas": copas},
+        {},
         sort=[("timestamp", -1)]
     )
     return resultado["cantidad_patio"] if resultado else 0
 
-def db_calcular_completadas_hoy(medida, copas, fabricadas_hoy, patio_hoy):
-    """Aplica tu fórmula matemática, Sergio."""
-    # 1. Buscamos lo que quedó de ayer
-    patio_ayer = db_obtener_ultimo_patio(medida, copas)
-    
-    # 2. Aplicamos tu lógica: (Ayer + Máquina) - Hoy
+def db_calcular_completadas_hoy_global(fabricadas_hoy, patio_hoy):
+    """Aplica tu fórmula con los totales generales de la planta, Sergio."""
+    patio_ayer = db_obtener_ultimo_patio_global()
     completadas = (patio_ayer + int(fabricadas_hoy)) - int(patio_hoy)
-    
-    # Si por un error humano da negativo, lo dejamos en 0
     return max(0, completadas), patio_ayer
 
 def db_obtener_totales():
