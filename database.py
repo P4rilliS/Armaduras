@@ -5,7 +5,6 @@ from datetime import datetime
 # Conexión (Cámbialo por tu URI de Atlas)
 MONGO_URL = os.getenv("MONGO_URL")
 client = MongoClient(MONGO_URL)
-# client = MongoClient("mongodb+srv://admin:admin12345@clusterprueba.l2t7dwu.mongodb.net/?appName=clusterPrueba") 
 db = client['FabricaResortes']
 
 try:
