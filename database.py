@@ -67,3 +67,28 @@ def borrar_toda_la_data():
     except Exception as e:
         print(f"Error al borrar la data: {e}")
         return False
+
+def db_obtener_resumen_semanal_global():
+    """Trae la producción y el patio de los últimos 7 días agrupados por fecha."""
+    # Buscamos los últimos 7 días de producción
+    hoy = datetime.now()
+    fecha_limite = hoy - timedelta(days=7)
+    
+    # Traemos la data ordenada por fecha
+    registros_prod = list(col_produccion.find({"timestamp": {"$gte": fecha_limite}}).sort("timestamp", 1))
+    
+    resumen = {}
+    
+    # Agrupamos lo de la máquina por día
+    for p in registros_prod:
+        fecha = p.get("fecha")
+        if fecha not in resumen:
+            resumen[fecha] = {"maquina": 0, "patio": 0, "timestamp": p.get("timestamp")}
+        resumen[fecha]["maquina"] += p.get("cantidad", 0)
+        
+    # Le metemos el patio que corresponda a cada día
+    for fecha in resumen.keys():
+        patio_reg = col_patio.find_one({"fecha": fecha})
+        resumen[fecha]["patio"] = patio_reg["cantidad_patio"] if patio_reg else 0
+
+    return resumen
