@@ -50,8 +50,9 @@ async def iniciar_produccion(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def iniciar_patio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['accion'] = 'patio'
-    await update.message.reply_text("⏳ Selecciona la medida de lo que quedó en el patio:", reply_markup=prod.menu_medidas())
-    return MEDIDA
+    # Saltamos la pregunta de la medida, Sergio. Directo al grano:
+    await update.message.reply_text("⏳ **Inventario General de Patio**\n\n🔢 Dime la cantidad TOTAL de armaduras que quedaron HOY sin completar:")
+    return PATIO_CANTIDAD # Le decimos al bot que espere el número de una vez
 
 async def handle_medida(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -72,15 +73,10 @@ async def handle_copas(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     copas = query.data.split('_')[2]
     context.user_data['prod_copas'] = copas
-    accion = context.user_data.get('accion')
     
-    if accion == 'produccion':
-        await query.edit_message_text(f"Perfecto: {context.user_data['prod_medida']}m con {copas}C.\n\n🔢 Cantidad fabricada por la máquina hoy:")
-        return CANTIDAD
-    else:
-        await query.edit_message_text(f"Inventario Patio: {context.user_data['prod_medida']}m con {copas}C.\n\n🔢 Cantidad de armaduras que quedaron HOY sin completar:")
-        return PATIO_CANTIDAD
-
+    # Como patio entra directo, aquí solo llega lo de la máquina
+    await query.edit_message_text(f"Perfecto: {context.user_data['prod_medida']}m con {copas}C.\n\n🔢 Cantidad fabricada por la máquina hoy:")
+    return CANTIDAD
 
 # --- GUARDAR PRODUCCIÓN DE LA MÁQUINA ---
 async def guardar_produccion_final(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -113,30 +109,29 @@ async def guardar_patio_final(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text(f"{user_name}, coloca un número entero válido.")
         return PATIO_CANTIDAD
 
-    medida = context.user_data.get('prod_medida')
-    copas = context.user_data.get('prod_copas')
-    
+    # 1. Sumamos TODO lo que hizo la máquina hoy (todas las medidas combinadas)
     hoy_str = datetime.now().strftime("%d/%m/%Y")
-    registro_hoy = db.col_produccion.find_one({"medida": medida, "copas": copas, "fecha": hoy_str})
-    fabricadas_hoy = registro_hoy["cantidad"] if registro_hoy else 0
+    registros_hoy = list(db.col_produccion.find({"fecha": hoy_str}))
+    fabricadas_hoy = sum(r["cantidad"] for r in registros_hoy)
 
-    db.db_registrar_patio(medida, copas, patio_hoy)
+    # 2. Guardamos el patio global en Mongo
+    db.db_registrar_patio(patio_hoy)
     
-    completadas, patio_ayer = db.db_calcular_completadas_hoy(medida, copas, fabricadas_hoy, patio_hoy)
+    # 3. Tu fórmula mágica sin importar la medida
+    completadas, patio_ayer = db.db_calcular_completadas_hoy_global(fabricadas_hoy, patio_hoy)
     
     mensaje = (
-        f"✅ ¡Inventario guardado, {user_name}!\n\n"
-        f"📊 **REPORTE: {medida}m * {copas}C**\n"
-        f"📦 Quedaron del cierre anterior: {patio_ayer}\n"
-        f"⚙️ Fabricó la máquina hoy: {fabricadas_hoy}\n"
-        f"⏳ Quedan en patio hoy: {patio_hoy}\n\n"
-        f"🛠️ **ARMADURAS COMPLETADAS HOY: {completadas}**"
+        f"✅ ¡Inventario global guardado, {user_name}!\n\n"
+        f"📊 **REPORTE GENERAL DE LA PLANTA**\n"
+        f"📦 Quedaron del cierre anterior (Total): {patio_ayer}\n"
+        f"⚙️ Fabricó la máquina hoy (Total): {fabricadas_hoy}\n"
+        f"⏳ Quedan en patio hoy (Total): {patio_hoy}\n\n"
+        f"🛠️ **TOTAL ARMADURAS COMPLETADAS HOY: {completadas}**"
     )
     
     await update.message.reply_text(mensaje, reply_markup=get_main_keyboard())
     context.user_data.clear()
     return ConversationHandler.END
-
 
 # --- VER TOTALES ---
 async def ver_totales(update: Update, context: ContextTypes.DEFAULT_TYPE):
