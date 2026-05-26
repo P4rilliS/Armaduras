@@ -5,25 +5,23 @@ from datetime import datetime
 from telegram import ReplyKeyboardMarkup, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler
 
-
 # --- Importamos los archivos del proyecto ---
 import database as db
 import produccion as prod
-import alambre as al
-import generarPDF as genPDF
+# Nota: El archivo 'alambre' ya no hace falta si eliminaste su lógica
 
 # Configuración de logs
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram.ext.Application").setLevel(logging.WARNING)
 
-
 # ESTADOS DE LA CONVERSACIÓN
-# Usamos estos para que el bot sepa en qué paso de la "entrevista" va
-MEDIDA, COPAS, CANTIDAD, ALAMBRE_CALIBRE, ALAMBRE_KILOS = range(5)
-TOKEN_TELEGRAM = os.getenv("TOKEN_TELEGRAM")  # Asegúrate de tener esta variable en tu .env
+# Limpiamos los estados viejos de alambre y agregamos PATIO_CANTIDAD
+MEDIDA, COPAS, CANTIDAD, PATIO_CANTIDAD = range(4)
+TOKEN_TELEGRAM = os.getenv("TOKEN_TELEGRAM")
 
-TECLADO = [['➕ Produccion de Armaduras'], ['🔩 Gasto de Alambre'], ['📊 Ver Totales', '📄 Descargar PDF']]
+# CAMBIAMOS EL BOTÓN VIEJO POR EL DE INVENTARIO DE PATIO
+TECLADO = [['➕ Produccion de Armaduras'], ['⏳ Inventario de Patio'], ['📊 Ver Totales', '📄 Descargar PDF']]
 CANCELAR = ReplyKeyboardMarkup([['❌ Cancelar']], resize_keyboard=True, one_time_keyboard=True)
 
 # --- Teclado Principal ---
@@ -34,33 +32,37 @@ def get_main_keyboard():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = update.effective_user.first_name
     await update.message.reply_text(
-        f"¡Hola {user_name}! Aqui llevas a cabo el inventario de armaduras y el gasto de alambre\n\nSelecciona una opcion:",
-        reply_markup=ReplyKeyboardMarkup(TECLADO, resize_keyboard=True)
+        f"¡Hola {user_name}! Aquí llevas el control de la máquina y el inventario del patio.\n\nSelecciona una opción:",
+        reply_markup=get_main_keyboard()
     )
 
 async def cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancela la operación y muestra el menú principal de una vez."""
-    context.user_data.clear() # Limpiamos los datos que se estaban llenando
+    context.user_data.clear() 
     await update.message.reply_text("Operación cancelada.", reply_markup=get_main_keyboard())
     return ConversationHandler.END
 
 
-# --- PRODUCCION DE ARMADURAS ---
+# --- FLUJO COMÚN PARA SELECCIONAR MEDIDA Y COPAS ---
 async def iniciar_produccion(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['accion'] = 'produccion'  # Guardamos qué está haciendo el usuario
     await update.message.reply_text("📏 Selecciona la medida:", reply_markup=prod.menu_medidas())
+    return MEDIDA
+
+async def iniciar_patio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['accion'] = 'patio'       # Guardamos que va a registrar patio
+    await update.message.reply_text("⏳ Selecciona la medida de lo que quedó en el patio:", reply_markup=prod.menu_medidas())
     return MEDIDA
 
 async def handle_medida(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
-    # Guardamos la medida elegida (100 o 140) en la memoria temporal del bot
     medida = query.data.split('_')[1]
     context.user_data['prod_medida'] = medida
     
-    # Mostramos el menú de copas según la medida
     await query.edit_message_text(
-        text=f"Seleccionaste {medida}. ¿De cuántas copas?",
+        text=f"Seleccionaste {medida}m. ¿De cuántas copas?",
         reply_markup=prod.menu_copas(medida)
     )
     return COPAS
@@ -69,158 +71,140 @@ async def handle_copas(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
-    # Guardamos las copas elegidas
     copas = query.data.split('_')[2]
     context.user_data['prod_copas'] = copas
+    accion = context.user_data.get('accion')
     
-    await query.edit_message_text(f"Perfecto: {context.user_data['prod_medida']}m con {copas}C.\n\n🔢 cantidad producida:")
-    return CANTIDAD
+    # Dependiendo de la acción, pedimos un dato u otro
+    if accion == 'produccion':
+        await query.edit_message_text(f"Perfecto: {context.user_data['prod_medida']}m con {copas}C.\n\n🔢 Cantidad fabricada por la máquina hoy:")
+        return CANTIDAD
+    else:
+        await query.edit_message_text(f"Inventario Patio: {context.user_data['prod_medida']}m con {copas}C.\n\n🔢 Cantidad de armaduras que quedaron HOY sin completar:")
+        return PATIO_CANTIDAD
 
+
+# --- GUARDAR PRODUCCIÓN DE LA MÁQUINA ---
 async def guardar_produccion_final(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = update.effective_user.first_name
     cantidad = update.message.text
     
     if not cantidad.isdigit():
-        await update.message.reply_text(f"{user_name}, coloca un número válido.")
+        await update.message.reply_text(f"{user_name}, coloca un número entero válido.")
         return CANTIDAD
 
-    # Sacamos los datos que veníamos guardando en user_data
     medida = context.user_data.get('prod_medida')
     copas = context.user_data.get('prod_copas')
     
-    # GUARDAMOS EN MONGODB
     db.db_guardar_produccion(medida, copas, cantidad)
-    user_name = update.effective_user.first_name
     
     await update.message.reply_text(
-        f"✅ ¡Listo {user_name}!\nRegistrado: {medida}m - {copas}C - Cantidad: {cantidad}",
+        f"✅ ¡Listo {user_name}!\nRegistrado en Máquina: {medida}m - {copas}C - Cantidad: {cantidad}",
         reply_markup=get_main_keyboard()
     )
+    context.user_data.clear()
     return ConversationHandler.END
 
 
-
-# --- GASTO DE ALAMBRE ---
-
-async def iniciar_alambre(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔩 Selecciona el calibre del alambre:", reply_markup=al.menu_alambre())
-    return ALAMBRE_CALIBRE
-async def handle_calibre(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    calibre = query.data.split('_')[1]
-    context.user_data['alambre_calibre'] = calibre
-    
-    await query.edit_message_text(f"Calibre {calibre} seleccionado.\n\n🔢 Ahora dime cuántos kilos ingresaron:")
-    return ALAMBRE_KILOS
-async def guardar_alambre_final(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# --- GUARDAR INVENTARIO DE PATIO Y SACAR CUENTA ---
+async def guardar_patio_final(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = update.effective_user.first_name
-    kilos = update.message.text.replace(',', '.')
+    patio_hoy = update.message.text
     
-    try:
-        kilos_float = float(kilos)
-    except ValueError:
-        await update.message.reply_text(f"{user_name}, coloca un número válido para los kilos.")
-        return ALAMBRE_KILOS
+    if not patio_hoy.isdigit():
+        await update.message.reply_text(f"{user_name}, coloca un número entero válido.")
+        return PATIO_CANTIDAD
 
-    calibre = context.user_data.get('alambre_calibre')
+    medida = context.user_data.get('prod_medida')
+    copas = context.user_data.get('prod_copas')
     
-    db.db_registrar_alambre(calibre, kilos_float)
+    # 1. Buscamos cuánto fabricó la máquina HOY para poder aplicar la fórmula de Sergio
+    # Buscamos en los registros de hoy. Si no ha registrado nada hoy, asumimos 0
+    hoy_str = datetime.now().strftime("%d/%m/%Y")
+    registro_hoy = db.col_produccion.find_one({"medida": medida, "copas": copas, "fecha": hoy_str})
+    fabricadas_hoy = registro_hoy["cantidad"] if registro_hoy else 0
+
+    # 2. Guardamos el patio de hoy en Mongo
+    db.db_registrar_patio(medida, copas, patio_hoy)
     
-    await update.message.reply_text(
-        f"✅ Registrado: Calibre {calibre} - {kilos_float}kg",
-        reply_markup=get_main_keyboard()
+    # 3. Aplicamos tu fórmula matemática: (Ayer + Máquina) - Hoy
+    completadas, patio_ayer = db.db_calcular_completadas_hoy(medida, copas, fabricadas_hoy, patio_hoy)
+    
+    mensaje = (
+        f"✅ ¡Inventario guardado, {user_name}!\n\n"
+        f"📊 **REPORTE: {medida}m * {copas}C**\n"
+        f"📦 Quedaron de ayer: {patio_ayer}\n"
+        f"⚙️ Fabricó la máquina hoy: {fabricadas_hoy}\n"
+        f"⏳ Quedan en patio hoy: {patio_hoy}\n\n"
+        f"🛠️ **ARMADURAS COMPLETADAS HOY: {completadas}**"
     )
+    
+    await update.message.reply_text(mensaje, reply_markup=get_main_keyboard())
+    context.user_data.clear()
     return ConversationHandler.END
 
-# --- VER TOTALES ---
+
+# --- VER TOTALES (Corregido para evitar el error de formato) ---
 async def ver_totales(update: Update, context: ContextTypes.DEFAULT_TYPE):
     totales = db.db_obtener_totales()
     if not totales:
         await update.message.reply_text("No hay nada en la base de datos.")
         return
 
-    texto = "📊 **TOTALES DE ARMADURAS**\n\n"
+    texto = "📊 *TOTALES DE ARMADURAS HISTÓRICOS*\n\n"
     for t in totales:
-        # texto += f"hola aqui va"
-        texto += f"🔹 {t['_id']['m']}m \* {t['_id']['c']}C\n   Total: {t['total']}\n\n"
+        texto += f"🔹 *{t['_id']['m']}m* - *{t['_id']['c']}C*\n      Total Máquina: {t['total']}\n\n"
     
     await update.message.reply_text(texto, parse_mode='Markdown')
 
-# --- GENERAR PDF ---    
 
-async def generar_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_name = update.effective_user.first_name
-    # Llamamos a la función del otro archivo
-    archivo = genPDF.crear_pdf_semanal()
-
-    if archivo is None:
-        await update.message.reply_text(f"{user_name}, todavía no hay data cargada desde el lunes.")
-        return
-
-    # Enviamos el archivo
-    with open(archivo, 'rb') as doc:
-        await context.bot.send_document(
-            chat_id=update.effective_chat.id,
-            document=doc,
-            caption=f"Aquí tienes el reporte de la fábrica, {user_name}!"
-        )
-    
-    # Borramos el archivo para que no estorbe en la carpeta
-    os.remove(archivo)
-
-
-# ---LIMPIAR TODO ---
+# --- RESETEAR SISTEMA ---
 async def comando_limpiar_todo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     exito = db.borrar_toda_la_data()
     if exito:
         mensaje = (
             "💣 **¡SISTEMA RESETEADO!**\n\n"
             "Se borraron:\n"
-            "✅ Todas las armaduras ingresadas.\n"
-            "✅ El alambre ingresado.\n\n"
-            "Ya puedes empezar de cero."
+            "✅ Todas las armaduras de la máquina.\n"
+            "✅ Todos los históricos del patio.\n\n"
+            "Ya puedes empezar de cero, Sergio."
         )
-    else:        mensaje = "❌ Hubo un error al intentar borrar la data.."
-    await update.message.reply_text(mensaje, parse_mode='Markdown', reply_markup=ReplyKeyboardMarkup(TECLADO, resize_keyboard=True))
+    else:
+        mensaje = "❌ Hubo un error al intentar borrar la data.."
+        
+    await update.message.reply_text(mensaje, parse_mode='Markdown', reply_markup=get_main_keyboard())
+
 
 # --- MAIN ---
 if __name__ == '__main__':
     if not TOKEN_TELEGRAM:
         print("❌ ERROR: No se encontró la variable TOKEN_TELEGRAM. Revisa Railway.")
-        exit(1) # Detiene el programa con elegancia
+        exit(1)
     
     application = ApplicationBuilder().token(TOKEN_TELEGRAM).build()
 
-
-    # Manejador de la conversación de armaduras
- 
-
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & filters.Regex('^📊 Ver Totales'), ver_totales))
-    application.add_handler(MessageHandler(filters.TEXT & filters.Regex('^📄 Descargar PDF'), generar_pdf))
-    application.add_handler(CommandHandler("limpiar", comando_limpiar_todo)) # Comando para limpiar todo (solo para pruebas)
+    # Aquí puedes agregar el handler de PDF cuando lo adaptes
+    # application.add_handler(MessageHandler(filters.TEXT & filters.Regex('^📄 Descargar PDF'), generar_pdf))
+    application.add_handler(CommandHandler("limpiar", comando_limpiar_todo))
 
+    # El ConversationHandler unificado maneja producción y patio usando los mismos menús
     conv_prod = ConversationHandler(
-            entry_points=[
-                MessageHandler(filters.Regex('➕ Produccion de Armaduras'), iniciar_produccion),
-                MessageHandler(filters.Regex('🔩 Gasto de Alambre'), iniciar_alambre)
-            ],
-            states={
-                MEDIDA: [MessageHandler(filters.Regex('^❌ Cancelar$'), cancelar), CallbackQueryHandler(handle_medida, pattern='^medida_')],
-                COPAS: [MessageHandler(filters.Regex('^❌ Cancelar$'), cancelar), CallbackQueryHandler(handle_copas, pattern='^copas_')],
-                CANTIDAD: [MessageHandler(filters.Regex('^❌ Cancelar$'), cancelar), MessageHandler(filters.TEXT & ~filters.COMMAND, guardar_produccion_final)],
-                ALAMBRE_CALIBRE: [MessageHandler(filters.Regex('^❌ Cancelar$'), cancelar), CallbackQueryHandler(handle_calibre, pattern='^alambre_')],
-                ALAMBRE_KILOS: [MessageHandler(filters.Regex('^❌ Cancelar$'), cancelar), MessageHandler(filters.TEXT & ~filters.COMMAND, guardar_alambre_final)],
-            },
-            fallbacks=[CommandHandler("start", start), MessageHandler(filters.Regex('^❌ Cancelar$'), cancelar)],
-            allow_reentry=True # IMPORTANTE: Permite saltar de una función a otra si te equivocas
-        )
-    application.add_handler(conv_prod)    
-
-
-
+        entry_points=[
+            MessageHandler(filters.Regex('➕ Produccion de Armaduras'), iniciar_produccion),
+            MessageHandler(filters.Regex('⏳ Inventario de Patio'), iniciar_patio)
+        ],
+        states={
+            MEDIDA: [MessageHandler(filters.Regex('^❌ Cancelar$'), cancelar), CallbackQueryHandler(handle_medida, pattern='^medida_')],
+            COPAS: [MessageHandler(filters.Regex('^❌ Cancelar$'), cancelar), CallbackQueryHandler(handle_copas, pattern='^copas_')],
+            CANTIDAD: [MessageHandler(filters.Regex('^❌ Cancelar$'), cancelar), MessageHandler(filters.TEXT & ~filters.COMMAND, guardar_produccion_final)],
+            PATIO_CANTIDAD: [MessageHandler(filters.Regex('^❌ Cancelar$'), cancelar), MessageHandler(filters.TEXT & ~filters.COMMAND, guardar_patio_final)],
+        },
+        fallbacks=[CommandHandler("start", start), MessageHandler(filters.Regex('^❌ Cancelar$'), cancelar)],
+        allow_reentry=True
+    )
+    application.add_handler(conv_prod)
 
     print("El bot esta online!")
     application.run_polling()
