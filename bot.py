@@ -134,18 +134,70 @@ async def guardar_patio_final(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ConversationHandler.END
 
 # --- VER TOTALES ---
+# --- VER TOTALES (MODIFICADO DIARIO POR DIA) ---
 async def ver_totales(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    totales = db.db_obtener_totales()
-    if not totales:
-        await update.message.reply_text("No hay nada en la base de datos.")
+    resumen = db.db_obtener_resumen_semanal_global()
+    
+    if not resumen:
+        await update.message.reply_text("📊 No hay movimientos registrados en la planta esta semana.")
         return
 
-    texto = "📊 *TOTALES DE ARMADURAS HISTÓRICOS*\n\n"
-    for t in totales:
-        texto += f"🔹 *{t['_id']['m']}m* - *{t['_id']['c']}C*\n      Total Máquina: {t['total']}\n\n"
+    texto = "📊 **RESUMEN DE PLANTA DIARIO**\n"
+    texto += "--------------------------------------\n\n"
     
+    # Ordenamos los días cronológicamente para mostrarlos en orden
+    dias_ordenados = sorted(resumen.items(), key=lambda x: x[1]['timestamp'])
+    
+    # Para saber qué día de la semana es en español
+    dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+
+    for fecha, datos in dias_ordenados:
+        dt = datos['timestamp']
+        nombre_dia = dias_semana[dt.weekday()]
+        
+        # Buscamos el patio del cierre anterior (ayer/viernes) para aplicar tu fórmula Sergio
+        # Para hacerlo dinámico en el histórico, restamos un día para buscar el patio previo
+        fecha_ayer_dt = dt - timedelta(days=1)
+        # Si fue lunes, restamos 3 días para buscar el viernes
+        if dt.weekday() == 0: 
+            fecha_ayer_dt = dt - timedelta(days=3)
+            
+        fecha_ayer_str = fecha_ayer_dt.strftime("%d/%m/%Y")
+        patio_ayer_reg = db.col_patio.find_one({"fecha": fecha_ayer_str})
+        patio_ayer = patio_ayer_reg["cantidad_patio"] if patio_ayer_reg else 0
+        
+        # Tu fórmula mágica: (Patio Ayer + Máquina Hoy) - Patio Hoy
+        completadas = (patio_ayer + datos['maquina']) - datos['patio']
+        completadas = max(0, completadas) # Evitamos negativos por si acaso
+        
+        texto += f"📅 **{nombre_dia} ({fecha[:5]})**\n"
+        texto += f"   ⚙️ Máquina: {datos['maquina']}\n"
+        texto += f"   ⏳ Quedó en Patio: {datos['patio']}\n"
+        texto += f"   ✅ **Completadas: {completadas}**\n"
+        texto += "--------------------------------------\n"
+        
     await update.message.reply_text(texto, parse_mode='Markdown')
 
+
+# --- ENVIAR PDF CORREGIDO ---
+async def generar_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_name = update.effective_user.first_name
+    await update.message.reply_text("⏳ Generando el reporte PDF para la oficina, espera un momento...")
+
+    # Llamamos al generador actualizado
+    archivo = genPDF.crear_pdf_semanal()
+
+    if archivo is None:
+        await update.message.reply_text(f"Mano {user_name}, todavía no hay data cargada esta semana para armar el PDF.")
+        return
+
+    with open(archivo, 'rb') as doc:
+        await context.bot.send_document(
+            chat_id=update.effective_chat.id,
+            document=doc,
+            caption=f"¡Aquí tienes el reporte de inventario listo, Sergio!"
+        )
+    os.remove(archivo)
 
 # --- ENVIAR PDF RE-ACTIVADO ---
 async def generar_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
