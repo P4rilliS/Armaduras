@@ -8,7 +8,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 # --- Importamos los archivos del proyecto ---
 import database as db
 import produccion as prod
-# Nota: El archivo 'alambre' ya no hace falta si eliminaste su lógica
+import generarPDF as genPDF  # <--- Re-activado Sergio
 
 # Configuración de logs
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.WARNING)
@@ -16,11 +16,10 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram.ext.Application").setLevel(logging.WARNING)
 
 # ESTADOS DE LA CONVERSACIÓN
-# Limpiamos los estados viejos de alambre y agregamos PATIO_CANTIDAD
 MEDIDA, COPAS, CANTIDAD, PATIO_CANTIDAD = range(4)
 TOKEN_TELEGRAM = os.getenv("TOKEN_TELEGRAM")
 
-# CAMBIAMOS EL BOTÓN VIEJO POR EL DE INVENTARIO DE PATIO
+# TECLADO CON NUEVO BOTÓN
 TECLADO = [['➕ Produccion de Armaduras'], ['⏳ Inventario de Patio'], ['📊 Ver Totales', '📄 Descargar PDF']]
 CANCELAR = ReplyKeyboardMarkup([['❌ Cancelar']], resize_keyboard=True, one_time_keyboard=True)
 
@@ -45,12 +44,12 @@ async def cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- FLUJO COMÚN PARA SELECCIONAR MEDIDA Y COPAS ---
 async def iniciar_produccion(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['accion'] = 'produccion'  # Guardamos qué está haciendo el usuario
+    context.user_data['accion'] = 'produccion'
     await update.message.reply_text("📏 Selecciona la medida:", reply_markup=prod.menu_medidas())
     return MEDIDA
 
 async def iniciar_patio(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['accion'] = 'patio'       # Guardamos que va a registrar patio
+    context.user_data['accion'] = 'patio'
     await update.message.reply_text("⏳ Selecciona la medida de lo que quedó en el patio:", reply_markup=prod.menu_medidas())
     return MEDIDA
 
@@ -75,7 +74,6 @@ async def handle_copas(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['prod_copas'] = copas
     accion = context.user_data.get('accion')
     
-    # Dependiendo de la acción, pedimos un dato u otro
     if accion == 'produccion':
         await query.edit_message_text(f"Perfecto: {context.user_data['prod_medida']}m con {copas}C.\n\n🔢 Cantidad fabricada por la máquina hoy:")
         return CANTIDAD
@@ -118,22 +116,18 @@ async def guardar_patio_final(update: Update, context: ContextTypes.DEFAULT_TYPE
     medida = context.user_data.get('prod_medida')
     copas = context.user_data.get('prod_copas')
     
-    # 1. Buscamos cuánto fabricó la máquina HOY para poder aplicar la fórmula de Sergio
-    # Buscamos en los registros de hoy. Si no ha registrado nada hoy, asumimos 0
     hoy_str = datetime.now().strftime("%d/%m/%Y")
     registro_hoy = db.col_produccion.find_one({"medida": medida, "copas": copas, "fecha": hoy_str})
     fabricadas_hoy = registro_hoy["cantidad"] if registro_hoy else 0
 
-    # 2. Guardamos el patio de hoy en Mongo
     db.db_registrar_patio(medida, copas, patio_hoy)
     
-    # 3. Aplicamos tu fórmula matemática: (Ayer + Máquina) - Hoy
     completadas, patio_ayer = db.db_calcular_completadas_hoy(medida, copas, fabricadas_hoy, patio_hoy)
     
     mensaje = (
         f"✅ ¡Inventario guardado, {user_name}!\n\n"
         f"📊 **REPORTE: {medida}m * {copas}C**\n"
-        f"📦 Quedaron de ayer: {patio_ayer}\n"
+        f"📦 Quedaron del cierre anterior: {patio_ayer}\n"
         f"⚙️ Fabricó la máquina hoy: {fabricadas_hoy}\n"
         f"⏳ Quedan en patio hoy: {patio_hoy}\n\n"
         f"🛠️ **ARMADURAS COMPLETADAS HOY: {completadas}**"
@@ -144,7 +138,7 @@ async def guardar_patio_final(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ConversationHandler.END
 
 
-# --- VER TOTALES (Corregido para evitar el error de formato) ---
+# --- VER TOTALES ---
 async def ver_totales(update: Update, context: ContextTypes.DEFAULT_TYPE):
     totales = db.db_obtener_totales()
     if not totales:
@@ -156,6 +150,26 @@ async def ver_totales(update: Update, context: ContextTypes.DEFAULT_TYPE):
         texto += f"🔹 *{t['_id']['m']}m* - *{t['_id']['c']}C*\n      Total Máquina: {t['total']}\n\n"
     
     await update.message.reply_text(texto, parse_mode='Markdown')
+
+
+# --- ENVIAR PDF RE-ACTIVADO ---
+async def generar_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_name = update.effective_user.first_name
+    await update.message.reply_text("⏳ Generando el reporte PDF para la oficina, espera un momento...")
+
+    archivo = genPDF.crear_pdf_semanal()
+
+    if archivo is None:
+        await update.message.reply_text(f"Mano {user_name}, todavía no hay data cargada esta semana para armar el PDF.")
+        return
+
+    with open(archivo, 'rb') as doc:
+        await context.bot.send_document(
+            chat_id=update.effective_chat.id,
+            document=doc,
+            caption=f"¡Aquí tienes el reporte de inventario listo Sergio!"
+        )
+    os.remove(archivo)
 
 
 # --- RESETEAR SISTEMA ---
@@ -185,11 +199,9 @@ if __name__ == '__main__':
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & filters.Regex('^📊 Ver Totales'), ver_totales))
-    # Aquí puedes agregar el handler de PDF cuando lo adaptes
-    # application.add_handler(MessageHandler(filters.TEXT & filters.Regex('^📄 Descargar PDF'), generar_pdf))
+    application.add_handler(MessageHandler(filters.TEXT & filters.Regex('^📄 Descargar PDF'), generar_pdf)) # <--- Mapeado de vuelta
     application.add_handler(CommandHandler("limpiar", comando_limpiar_todo))
 
-    # El ConversationHandler unificado maneja producción y patio usando los mismos menús
     conv_prod = ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex('➕ Produccion de Armaduras'), iniciar_produccion),
