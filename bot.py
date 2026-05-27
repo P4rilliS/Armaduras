@@ -136,6 +136,7 @@ async def guardar_patio_final(update: Update, context: ContextTypes.DEFAULT_TYPE
 # --- VER TOTALES ---
 # --- VER TOTALES (MODIFICADO DIARIO POR DIA) ---
 async def ver_totales(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # 1. Traemos la lista unificada que ya sumó la máquina y calculó los patios
     resumen = db.db_obtener_resumen_semanal_global()
     
     if not resumen:
@@ -145,39 +146,26 @@ async def ver_totales(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = "📊 **RESUMEN DE PLANTA DIARIO**\n"
     texto += "--------------------------------------\n\n"
     
-    # Ordenamos los días cronológicamente para mostrarlos en orden
-    dias_ordenados = sorted(resumen.items(), key=lambda x: x[1]['timestamp'])
-    
-    # Para saber qué día de la semana es en español
+    # Días en español
     dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 
-    for fecha, datos in dias_ordenados:
-        dt = datos['timestamp']
-        nombre_dia = dias_semana[dt.weekday()]
+    # 2. Como ya la base de datos nos da la lista ORDENADA por fecha, 
+    # solo hacemos un for directo sobre 'resumen', sin .items() ni sort extras.
+    for dia in resumen:
+        # Extraemos el día de la semana usando el objeto datetime 'dt' que guardamos en base de datos
+        nombre_dia = dias_semana[dia['dt'].weekday()]
         
-        # Buscamos el patio del cierre anterior (ayer/viernes) para aplicar tu fórmula Sergio
-        # Para hacerlo dinámico en el histórico, restamos un día para buscar el patio previo
-        fecha_ayer_dt = dt - timedelta(days=1)
-        # Si fue lunes, restamos 3 días para buscar el viernes
-        if dt.weekday() == 0: 
-            fecha_ayer_dt = dt - timedelta(days=3)
-            
-        fecha_ayer_str = fecha_ayer_dt.strftime("%d/%m/%Y")
-        patio_ayer_reg = db.col_patio.find_one({"fecha": fecha_ayer_str})
-        patio_ayer = patio_ayer_reg["cantidad_patio"] if patio_ayer_reg else 0
+        # Ya no hacemos consultas a Mongo aquí, usamos lo que ya viene calculado:
+        fecha_corta = dia['fecha'][:5] # Saca el '26/05' del '26/05/2026'
         
-        # Tu fórmula mágica: (Patio Ayer + Máquina Hoy) - Patio Hoy
-        completadas = (patio_ayer + datos['maquina']) - datos['patio']
-        completadas = max(0, completadas) # Evitamos negativos por si acaso
-        
-        texto += f"📅 **{nombre_dia} ({fecha[:5]})**\n"
-        texto += f"   ⚙️ Máquina: {datos['maquina']}\n"
-        texto += f"   ⏳ Quedó en Patio: {datos['patio']}\n"
-        texto += f"   ✅ **Completadas: {completadas}**\n"
+        texto += f"📅 **{nombre_dia} ({fecha_corta})**\n"
+        texto += f"   ⚙️ Máquina: {dia['maquina']}\n"
+        texto += f"   📦 Patio Cierre Ant: {dia['patio_ayer']}\n"
+        texto += f"   ⏳ Se quedan en Patio: {dia['patio_hoy']}\n"
+        texto += f"   ✅ **Completadas: {dia['completadas']}**\n"
         texto += "--------------------------------------\n"
         
     await update.message.reply_text(texto, parse_mode='Markdown')
-
 
 # --- ENVIAR PDF CORREGIDO ---
 async def generar_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
