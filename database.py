@@ -1,6 +1,7 @@
 import os
 from pymongo import MongoClient
 from datetime import datetime
+from datetime import datetime, timedelta
 
 # Conexión
 MONGO_URL = os.getenv("MONGO_URL")
