@@ -2,7 +2,6 @@ import os
 from pymongo import MongoClient
 import certifi
 from datetime import datetime, timedelta
-from dotenv import load_model
 
 try:
     from dotenv import load_dotenv
