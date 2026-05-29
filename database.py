@@ -9,16 +9,16 @@ try:
 except ImportError:
     pass
 
-
 # Conexión
 MONGO_URL = os.getenv("MONGO_URL")
 client = MongoClient(MONGO_URL, tlsCAFile=certifi.where())
-ENTORNO= os.getenv("ENTORNO", "produccion").lower()
+ENTORNO = os.getenv("ENTORNO", "produccion").lower()
+
 if ENTORNO == "pruebas":
-    db=client["Pruebas"]
+    db = client["Pruebas"]
     print("⚠️ Conectado a la base de datos de PRUEBAS")
 else:
-    db=client["FabricaResortes"]
+    db = client["FabricaResortes"]
     print("✅ Conectado a la base de datos de PRODUCCIÓN")
 
 try:
@@ -27,7 +27,7 @@ try:
 except Exception as e:
     print(f"❌ Error de conexión a Mongo: {e}")
 
-# Las Nuevas Gavetas
+# Las Nuevas Gavetas (Tus nombres exactos de colecciones)
 col_produccion = db['produccion_armaduras']  # Lo que hace la máquina hoy
 col_patio = db['inventario_patio']            # Lo que se queda en el patio sin terminar
 
@@ -43,25 +43,32 @@ def db_guardar_produccion(medida, copas, cantidad):
     return col_produccion.insert_one(registro)
 
 def db_registrar_patio(cantidad_quedaron):
-    """Registra el total global que quedó en el patio HOY sin terminar."""
-    registro = {
-        "fecha": datetime.now().strftime("%d/%m/%Y"),
-        "cantidad_patio": int(cantidad_quedaron),
-        "timestamp": datetime.now()
-    }
-    return col_patio.insert_one(registro)
+    """Guarda o PISA el patio global de hoy para evitar duplicados en la misma fecha."""
+    fecha_hoy = datetime.now().strftime("%d/%m/%Y")
+    return col_patio.update_one(
+        {"fecha": fecha_hoy},
+        {"$set": {
+            "cantidad_patio": int(cantidad_quedaron),
+            "timestamp": datetime.now()
+        }},
+        upsert=True # Si no existe hoy, lo crea. Si existe, lo actualiza.
+    )
 
-def db_obtener_ultimo_patio_global():
-    """Busca el último registro del patio general (lo que quedó el viernes/ayer)."""
+def db_obtener_patio_anterior_real(fecha_referencia_str):
+    """Busca el último patio registrado antes de la fecha dada (evita choques de días)."""
+    formato = "%d/%m/%Y"
+    dt_ref = datetime.strptime(fecha_referencia_str, formato)
+    
     resultado = col_patio.find_one(
-        {},
+        {"timestamp": {"$lt": dt_ref}}, # Estrictamente menor a la fecha en proceso
         sort=[("timestamp", -1)]
     )
     return resultado["cantidad_patio"] if resultado else 0
 
 def db_calcular_completadas_hoy_global(fabricadas_hoy, patio_hoy):
-    """Aplica tu fórmula con los totales generales de la planta, Sergio."""
-    patio_ayer = db_obtener_ultimo_patio_global()
+    """Aplica la fórmula matemática usando el patio anterior real de la fecha de hoy."""
+    fecha_hoy = datetime.now().strftime("%d/%m/%Y")
+    patio_ayer = db_obtener_patio_anterior_real(fecha_hoy)
     completadas = (patio_ayer + int(fabricadas_hoy)) - int(patio_hoy)
     return max(0, completadas), patio_ayer
 
@@ -83,26 +90,40 @@ def borrar_toda_la_data():
         return False
 
 def db_obtener_resumen_semanal_global():
-    """Trae la producción y el patio de los últimos 7 días agrupados por fecha."""
-    # Buscamos los últimos 7 días de producción
+    """Retorna una LISTA ordenada por fecha lista para consumir en el bot y PDF."""
     hoy = datetime.now()
     fecha_limite = hoy - timedelta(days=7)
     
-    # Traemos la data ordenada por fecha
-    registros_prod = list(col_produccion.find({"timestamp": {"$gte": fecha_limite}}).sort("timestamp", 1))
+    registros_prod = list(col_produccion.find({"timestamp": {"$gte": fecha_limite}}))
     
-    resumen = {}
-    
-    # Agrupamos lo de la máquina por día
+    # 1. Sumamos la máquina por fecha
+    maquina_por_dia = {}
     for p in registros_prod:
         fecha = p.get("fecha")
-        if fecha not in resumen:
-            resumen[fecha] = {"maquina": 0, "patio": 0, "timestamp": p.get("timestamp")}
-        resumen[fecha]["maquina"] += p.get("cantidad", 0)
+        if fecha not in maquina_por_dia:
+            maquina_por_dia[fecha] = 0
+        maquina_por_dia[fecha] += p.get("cantidad", 0)
         
-    # Le metemos el patio que corresponda a cada día
-    for fecha in resumen.keys():
-        patio_reg = col_patio.find_one({"fecha": fecha})
-        resumen[fecha]["patio"] = patio_reg["cantidad_patio"] if patio_reg else 0
-
-    return resumen
+    # 2. Construimos la lista estructurada aplicando la matemática global
+    resumen_final = []
+    for fecha, total_maquina in maquina_por_dia.items():
+        patio_hoy_reg = col_patio.find_one({"fecha": fecha})
+        patio_hoy = patio_hoy_reg["cantidad_patio"] if patio_hoy_reg else 0
+        
+        patio_ayer = db_obtener_patio_anterior_real(fecha)
+        completadas = max(0, (patio_ayer + total_maquina) - patio_hoy)
+        
+        dt_base = datetime.strptime(fecha, "%d/%m/%Y")
+        
+        resumen_final.append({
+            "fecha": fecha,
+            "maquina": total_maquina,
+            "patio_ayer": patio_ayer,
+            "patio_hoy": patio_hoy,
+            "completadas": completadas,
+            "dt": dt_base
+        })
+        
+    # Ordenamos cronológicamente de lunes a domingo
+    resumen_final.sort(key=lambda x: x["dt"])
+    return resumen_final
