@@ -1,12 +1,26 @@
 import os
 from pymongo import MongoClient
-from datetime import datetime
+import certifi
 from datetime import datetime, timedelta
+from dotenv import load_model
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 
 # Conexión
 MONGO_URL = os.getenv("MONGO_URL")
-client = MongoClient(MONGO_URL)
-db = client['FabricaResortes']
+client = MongoClient(MONGO_URL, tlsCAFile=certifi.where())
+ENTORNO= os.getenv("ENTORNO", "produccion").lower()
+if ENTORNO == "pruebas":
+    db=client["Pruebas"]
+    print("⚠️ Conectado a la base de datos de PRUEBAS")
+else:
+    db=client["FabricaResortes"]
+    print("✅ Conectado a la base de datos de PRODUCCIÓN")
 
 try:
     client.admin.command('ping')
