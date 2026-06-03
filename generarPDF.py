@@ -1,8 +1,9 @@
 from fpdf import FPDF
-from datetime import datetime, timedelta
+from datetime import datetime
 import database as db
 
 def crear_pdf_semanal():
+    # 1. Obtenemos la data (que ahora es una lista limpia y ordenada desde DB)
     resumen = db.db_obtener_resumen_semanal_global()
 
     if not resumen:
@@ -37,32 +38,26 @@ def crear_pdf_semanal():
     pdf.set_font("Arial", size=9)
     dias_semana = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"]
     
-    dias_ordenados = sorted(resumen.items(), key=lambda x: x[1]['timestamp'])
     gran_total_completadas = 0
 
-    for fecha, datos in dias_ordenados:
-        dt = datos['timestamp']
+    # 2. BUCLE PROFESIONAL: Procesamos la lista directa sin .items() ni cálculos extra
+    for dia in resumen:
+        # Extraemos las variables ya masticadas por la base de datos
+        fecha = dia['fecha']
+        dt = dia['dt']
+        maquina = dia['maquina']
+        patio_ayer = dia['patio_ayer']
+        patio_hoy = dia['patio_hoy']
+        completadas = dia['completadas']
+        
         nombre_dia = dias_semana[dt.weekday()]
-        
-        # Buscamos el patio anterior
-        fecha_ayer_dt = dt - timedelta(days=1)
-        if dt.weekday() == 0: 
-            fecha_ayer_dt = dt - timedelta(days=3)
-            
-        fecha_ayer_str = fecha_ayer_dt.strftime("%d/%m/%Y")
-        patio_ayer_reg = db.col_patio.find_one({"fecha": fecha_ayer_str})
-        patio_ayer = patio_ayer_reg["cantidad_patio"] if patio_ayer_reg else 0
-        
-        # Fórmula Sergio
-        completadas = (patio_ayer + datos['maquina']) - datos['patio']
-        completadas = max(0, completadas)
         gran_total_completadas += completadas
 
-        # Escribimos la fila
+        # Escribimos la fila exactamente igual a tu diseño
         pdf.cell(35, 7, f"{nombre_dia} ({fecha[:5]})", 1, 0, 'C')
-        pdf.cell(35, 7, str(datos['maquina']), 1, 0, 'C')
+        pdf.cell(35, 7, str(maquina), 1, 0, 'C')
         pdf.cell(40, 7, str(patio_ayer), 1, 0, 'C')
-        pdf.cell(40, 7, str(datos['patio']), 1, 0, 'C')
+        pdf.cell(40, 7, str(patio_hoy), 1, 0, 'C')
         
         pdf.set_font("Arial", "B", 9)
         pdf.cell(40, 7, str(completadas), 1, 1, 'C')
