@@ -167,27 +167,8 @@ async def ver_totales(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     await update.message.reply_text(texto, parse_mode='Markdown')
 
-# --- ENVIAR PDF CORREGIDO ---
-async def generar_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_name = update.effective_user.first_name
-    await update.message.reply_text("⏳ Generando el reporte PDF para la oficina, espera un momento...")
 
-    # Llamamos al generador actualizado
-    archivo = genPDF.crear_pdf_semanal()
-
-    if archivo is None:
-        await update.message.reply_text(f"Mano {user_name}, todavía no hay data cargada esta semana para armar el PDF.")
-        return
-
-    with open(archivo, 'rb') as doc:
-        await context.bot.send_document(
-            chat_id=update.effective_chat.id,
-            document=doc,
-            caption=f"¡Aquí tienes el reporte de inventario listo, Sergio!"
-        )
-    os.remove(archivo)
-
-# --- ENVIAR PDF RE-ACTIVADO ---
+# --- ENVIAR PDF ---
 async def generar_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = update.effective_user.first_name
     await update.message.reply_text("⏳ Generando el reporte PDF para la oficina, espera un momento...")
