@@ -159,9 +159,9 @@ async def ver_totales(update: Update, context: ContextTypes.DEFAULT_TYPE):
         fecha_corta = dia['fecha'][:5] # Saca el '26/05' del '26/05/2026'
         
         texto += f"📅 **{nombre_dia} ({fecha_corta})**\n"
+        texto += f"   📦 Cierre de patio ant: {dia['patio_ayer']}\n"
         texto += f"   ⚙️ Máquina: {dia['maquina']}\n"
-        texto += f"   📦 Patio Cierre Ant: {dia['patio_ayer']}\n"
-        texto += f"   ⏳ Se quedan en Patio: {dia['patio_hoy']}\n"
+        texto += f"   ⏳ Quedaron: {dia['patio_hoy']}\n"
         texto += f"   ✅ **Completadas: {dia['completadas']}**\n"
         texto += "--------------------------------------\n"
         
