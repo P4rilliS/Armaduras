@@ -8,7 +8,8 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 # --- Importamos los archivos del proyecto ---
 import database as db
 import produccion as prod
-import generarPDF as genPDF  # <--- Re-activado Sergio
+import generarPDF as genPDF
+
 
 # Configuración de logs
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.WARNING)
@@ -18,6 +19,7 @@ logging.getLogger("telegram.ext.Application").setLevel(logging.WARNING)
 # ESTADOS DE LA CONVERSACIÓN
 MEDIDA, COPAS, CANTIDAD, PATIO_CANTIDAD = range(4)
 TOKEN_TELEGRAM = os.getenv("TOKEN_TELEGRAM")
+ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
 
 # TECLADO CON NUEVO BOTÓN
 TECLADO = [['➕ Produccion de Armaduras'], ['⏳ Inventario de Patio'], ['📊 Ver Totales', '📄 Descargar PDF']]
@@ -44,11 +46,31 @@ async def cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- FLUJO COMÚN PARA SELECCIONAR MEDIDA Y COPAS ---
 async def iniciar_produccion(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    # 🔒 CANDADO DE SEGURIDAD
+    if user_id != ADMIN_ID:
+        print(f"🚫 Acceso denegado a ID {user_id} en botón: Producción")
+        await update.message.reply_text(
+            "⚠️ **Acceso Denegado.**\nNo tienes permisos para registrar datos de máquina en el sistema, Sergio."
+        )
+        return ConversationHandler.END
+
     context.user_data['accion'] = 'produccion'
     await update.message.reply_text("📏 Selecciona la medida:", reply_markup=prod.menu_medidas())
     return MEDIDA
 
 async def iniciar_patio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    # 🔒 CANDADO DE SEGURIDAD
+    if user_id != ADMIN_ID:
+        print(f"🚫 Acceso denegado a ID {user_id} en botón: Inventario Patio")
+        await update.message.reply_text(
+            "⚠️ **Acceso Denegado.**\nNo tienes permisos para modificar el inventario general de patio."
+        )
+        return ConversationHandler.END
+
     context.user_data['accion'] = 'patio'
     # Saltamos la pregunta de la medida, Sergio. Directo al grano:
     await update.message.reply_text("⏳ **Inventario General de Patio**\n\n🔢 Dime la cantidad TOTAL de armaduras que quedaron HOY sin completar:")
@@ -81,19 +103,19 @@ async def handle_copas(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- GUARDAR PRODUCCIÓN DE LA MÁQUINA ---
 async def guardar_produccion_final(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = update.effective_user.first_name
-    cantidad = update.message.text
+    amount_text = update.message.text
     
-    if not cantidad.isdigit():
+    if not amount_text.isdigit():
         await update.message.reply_text(f"{user_name}, coloca un número entero válido.")
         return CANTIDAD
 
     medida = context.user_data.get('prod_medida')
     copas = context.user_data.get('prod_copas')
     
-    db.db_guardar_produccion(medida, copas, cantidad)
+    db.db_guardar_produccion(medida, copas, amount_text)
     
     await update.message.reply_text(
-        f"✅ ¡Listo {user_name}!\nRegistrado en Máquina: {medida}m - {copas}C - Cantidad: {cantidad}",
+        f"✅ ¡Listo {user_name}!\nRegistrado en Máquina: {medida}m - {copas}C - Cantidad: {amount_text}",
         reply_markup=get_main_keyboard()
     )
     context.user_data.clear()
@@ -134,7 +156,6 @@ async def guardar_patio_final(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ConversationHandler.END
 
 # --- VER TOTALES ---
-# --- VER TOTALES (MODIFICADO DIARIO POR DIA) ---
 async def ver_totales(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 1. Traemos la lista unificada que ya sumó la máquina y calculó los patios
     resumen = db.db_obtener_resumen_semanal_global()
@@ -190,6 +211,14 @@ async def generar_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- RESETEAR SISTEMA ---
 async def comando_limpiar_todo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    # 🔒 CANDADO DE SEGURIDAD
+    if user_id != ADMIN_ID:
+        print(f"🚫 Acceso denegado a ID {user_id} en comando: /limpiar")
+        await update.message.reply_text("⚠️ **Acceso Denegado.** No tienes jerarquía para resetear la base de datos.")
+        return
+
     exito = db.borrar_toda_la_data()
     if exito:
         mensaje = (
@@ -215,7 +244,7 @@ if __name__ == '__main__':
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & filters.Regex('^📊 Ver Totales'), ver_totales))
-    application.add_handler(MessageHandler(filters.TEXT & filters.Regex('^📄 Descargar PDF'), generar_pdf)) # <--- Mapeado de vuelta
+    application.add_handler(MessageHandler(filters.TEXT & filters.Regex('^📄 Descargar PDF'), generar_pdf))
     application.add_handler(CommandHandler("limpiar", comando_limpiar_todo))
 
     conv_prod = ConversationHandler(
