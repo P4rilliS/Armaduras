@@ -93,13 +93,12 @@ def db_obtener_resumen_semanal_global():
     """Retorna una LISTA ordenada que va estrictamente desde el ÚLTIMO LUNES hasta hoy."""
     hoy = datetime.now()
     
-    # dt.weekday() nos dice qué día es hoy (0=Lunes, 1=Martes, ..., 6=Domingo)
-    # Restamos los días necesarios para bajarnos al lunes de esta semana a las 12:00 AM
+    # Calculamos el último lunes a las 12:00 AM
     dias_desde_lunes = hoy.weekday()
     ultimo_lunes = hoy - timedelta(days=dias_desde_lunes)
     fecha_limite = datetime.combine(ultimo_lunes.date(), datetime.min.time())
     
-    # Traemos de Mongo solo los registros que se hicieron desde ese lunes para acá
+    # Traemos de Mongo la producción de esta semana
     registros_prod = list(col_produccion.find({"timestamp": {"$gte": fecha_limite}}))
     
     # 1. Sumamos la máquina por fecha
@@ -113,13 +112,18 @@ def db_obtener_resumen_semanal_global():
     # 2. Construimos la lista estructurada aplicando la matemática global
     resumen_final = []
     for fecha, total_maquina in maquina_por_dia.items():
+        dt_base = datetime.strptime(fecha, "%d/%m/%Y")
+        
+        # 🚨 FILTRO EXPERTO: Si por alguna razón la fecha procesada es menor 
+        # al lunes de esta semana (limpieza de seguridad), la ignoramos.
+        if dt_base < fecha_limite:
+            continue
+            
         patio_hoy_reg = col_patio.find_one({"fecha": fecha})
         patio_hoy = patio_hoy_reg["cantidad_patio"] if patio_hoy_reg else 0
         
         patio_ayer = db_obtener_patio_anterior_real(fecha)
         completadas = max(0, (patio_ayer + total_maquina) - patio_hoy)
-        
-        dt_base = datetime.strptime(fecha, "%d/%m/%Y")
         
         resumen_final.append({
             "fecha": fecha,
