@@ -52,7 +52,7 @@ async def iniciar_produccion(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if user_id != ADMIN_ID:
         print(f"🚫 Acceso denegado a ID {user_id} en botón: Producción")
         await update.message.reply_text(
-            "⚠️ **Acceso Denegado.**\nNo tienes permisos para registrar datos de máquina en el sistema, Sergio."
+            "⚠️⚠️ **Acceso Denegado.**⚠️⚠️\nNo tienes permisos para registrar datos de máquina en el sistema."
         )
         return ConversationHandler.END
 
@@ -67,7 +67,7 @@ async def iniciar_patio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id != ADMIN_ID:
         print(f"🚫 Acceso denegado a ID {user_id} en botón: Inventario Patio")
         await update.message.reply_text(
-            "⚠️ **Acceso Denegado.**\nNo tienes permisos para modificar el inventario general de patio."
+            "⚠️⚠️ **Acceso Denegado.**⚠️⚠️\nNo tienes permisos para modificar el inventario general de patio."
         )
         return ConversationHandler.END
 
