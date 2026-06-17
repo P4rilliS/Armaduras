@@ -22,7 +22,7 @@ TOKEN_TELEGRAM = os.getenv("TOKEN_TELEGRAM")
 ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
 
 # TECLADO CON NUEVO BOTÓN
-TECLADO = [['➕ Produccion de Armaduras'], ['⏳ Inventario de Patio'], ['📊 Ver Totales', '📄 Descargar PDF']]
+TECLADO = [['➕ Produccion de Armaduras'], ['⏳ Inventario de Patio'], ['📊 Ver Totales', '📄 Descargar PDF','📊 Sabados']]
 CANCELAR = ReplyKeyboardMarkup([['❌ Cancelar']], resize_keyboard=True, one_time_keyboard=True)
 
 # --- Teclado Principal ---
